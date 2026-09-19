@@ -742,12 +742,11 @@ async function gerarExcel(combinacoes) {
                 );
 
             if (
-                typeof celula.value === "number"
+                typeof celula.value === "number" &&
+                Number.isFinite(celula.value)
             ) {
-
-                celula.numFmt =
-                    "0.##";
-
+    
+                celula.numFmt = "0";
             }
 
         }
