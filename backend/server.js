@@ -225,97 +225,128 @@ Retorne somente JSON válido no formato solicitado.
             --------------------------------------------- */
 
             console.log(
-                "Enviando imagens para o Gemini..."
-            );
+    "Enviando imagens para o Gemini..."
+);
 
-            const resposta =
-                await ai.models.generateContent({
+try {
 
-                    model: "gemini-3.8-flash",
+    try {
 
-                    contents: contents,
+    const resposta =
+        await ai.models.generateContent({
 
-                    config: {
+            model: "gemini-3.8-flash",
 
-                        responseMimeType:
-                            "application/json",
+            contents: contents,
 
-                        responseSchema: {
+            config: {
 
-                            type: "object",
+                responseMimeType:
+                    "application/json",
 
-                            properties: {
+                responseSchema: {
 
-                                tabelas: {
+                    type: "object",
 
-                                    type: "array",
+                    properties: {
 
-                                    items: {
+                        tabelas: {
 
-                                        type: "object",
+                            type: "array",
 
-                                        properties: {
+                            items: {
 
-                                            imagem: {
-                                                type: "string"
-                                            },
+                                type: "object",
 
-                                            produtos: {
+                                properties: {
 
-                                                type: "array",
+                                    imagem: {
+                                        type: "string"
+                                    },
 
-                                                items: {
+                                    produtos: {
 
-                                                    type: "object",
+                                        type: "array",
 
-                                                    properties: {
+                                        items: {
 
-                                                        produto: {
-                                                            type: "string"
-                                                        },
+                                            type: "object",
 
-                                                        valor: {
+                                            properties: {
 
-                                                            type: [
-                                                                "number",
-                                                                "null"
-                                                            ]
+                                                produto: {
+                                                    type: "string"
+                                                },
 
-                                                        }
+                                                valor: {
 
-                                                    },
-
-                                                    required: [
-                                                        "produto",
-                                                        "valor"
+                                                    type: [
+                                                        "number",
+                                                        "null"
                                                     ]
 
                                                 }
 
-                                            }
+                                            },
 
-                                        },
+                                            required: [
+                                                "produto",
+                                                "valor"
+                                            ]
 
-                                        required: [
-                                            "imagem",
-                                            "produtos"
-                                        ]
+                                        }
 
                                     }
 
-                                }
+                                },
 
-                            },
+                                required: [
+                                    "imagem",
+                                    "produtos"
+                                ]
 
-                            required: [
-                                "tabelas"
-                            ]
+                            }
 
                         }
 
-                    }
+                    },
 
-                });
+                    required: [
+                        "tabelas"
+                    ]
+
+                }
+
+            }
+
+        });
+
+    console.log(
+        "Resposta recebida do Gemini."
+    );
+
+} catch (erroGemini) {
+
+    console.error(
+        "ERRO ESPECÍFICO DO GEMINI:"
+    );
+
+    console.error(
+        erroGemini
+    );
+
+    return res.status(500).json({
+
+        erro:
+            "Erro ao enviar as imagens para o Gemini.",
+
+        detalhes:
+            erroGemini?.message ||
+            String(erroGemini)
+
+    });
+
+}
 
 
             console.log(
