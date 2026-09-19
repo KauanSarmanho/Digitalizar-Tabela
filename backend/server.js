@@ -358,6 +358,29 @@ Retorne somente JSON válido no formato solicitado.
 
 
             /* ---------------------------------------------
+               Combina tabelas complementares
+            --------------------------------------------- */
+
+            const combinacoes = combinarTabelas(
+                resultado.tabelas
+            );
+
+            console.log(
+                "Combinações encontradas:"
+            );
+
+            console.log(
+                JSON.stringify(
+                    combinacoes,
+                    null,
+                    2
+                )
+            );
+
+            resultado.combinacoes = combinacoes;
+
+
+            /* ---------------------------------------------
                Retorna resultado
             --------------------------------------------- */
 
@@ -392,8 +415,8 @@ Retorne somente JSON válido no formato solicitado.
 
             });
 
-
         } finally {
+
 
             /* ---------------------------------------------
                Remove ZIP temporário
@@ -448,6 +471,374 @@ Retorne somente JSON válido no formato solicitado.
 
 
 /* =========================================================
+   FUNÇÃO: COMBINAR TABELAS
+========================================================= */
+
+function combinarTabelas(tabelas) {
+
+    if (
+        !Array.isArray(tabelas) ||
+        tabelas.length === 0
+    ) {
+        return [];
+    }
+
+
+    /*
+       Normaliza os dados das tabelas.
+
+       Uma tabela sem nenhum valor preenchido
+       é ignorada.
+    */
+
+    const tabelasValidas = tabelas
+        .map((tabela, indice) => {
+
+            const produtos = Array.isArray(
+                tabela.produtos
+            )
+                ? tabela.produtos
+                : [];
+
+            const produtosNormalizados =
+                produtos.map((item) => ({
+
+                    produto:
+                        normalizarProduto(
+                            item.produto
+                        ),
+
+                    produtoOriginal:
+                        item.produto,
+
+                    valor:
+                        item.valor
+
+                }));
+
+            const possuiValor =
+                produtosNormalizados.some(
+                    (item) =>
+                        item.valor !== null &&
+                        item.valor !== undefined
+                );
+
+            return {
+
+                indiceOriginal:
+                    indice,
+
+                imagem:
+                    tabela.imagem,
+
+                produtos:
+                    produtosNormalizados,
+
+                possuiValor
+
+            };
+
+        })
+        .filter(
+            (tabela) =>
+                tabela.possuiValor
+        );
+
+
+    /*
+       Cada grupo começa com uma tabela.
+
+       Depois tentamos adicionar as tabelas seguintes
+       quando nenhum valor preenchido entra em conflito
+       com um valor que já existe no grupo.
+    */
+
+    const grupos = [];
+
+
+    for (
+        const tabela of tabelasValidas
+    ) {
+
+        let grupoEncontrado = false;
+
+
+        /*
+           Procuramos primeiro um grupo já existente
+           que possa receber esta tabela.
+
+           A ordem original das imagens é preservada.
+        */
+
+        for (
+            const grupo of grupos
+        ) {
+
+            if (
+                podeCombinar(
+                    grupo.produtos,
+                    tabela.produtos
+                )
+            ) {
+
+                grupo.produtos =
+                    preencherNulos(
+                        grupo.produtos,
+                        tabela.produtos
+                    );
+
+                grupo.imagens.push(
+                    tabela.imagem
+                );
+
+                grupo.indicesOriginais.push(
+                    tabela.indiceOriginal
+                );
+
+                grupoEncontrado = true;
+
+                break;
+            }
+
+        }
+
+
+        /*
+           Se não encontrou nenhum grupo compatível,
+           cria um novo grupo.
+        */
+
+        if (!grupoEncontrado) {
+
+            grupos.push({
+
+                imagens: [
+                    tabela.imagem
+                ],
+
+                indicesOriginais: [
+                    tabela.indiceOriginal
+                ],
+
+                produtos:
+                    tabela.produtos.map(
+                        (item) => ({
+
+                            produto:
+                                item.produto,
+
+                            produtoOriginal:
+                                item.produtoOriginal,
+
+                            valor:
+                                item.valor
+
+                        })
+                    )
+
+            });
+
+        }
+
+    }
+
+
+    /*
+       Monta o resultado final.
+
+       Cada grupo representa uma coluna:
+       Valor 1, Valor 2, Valor 3...
+    */
+
+    return grupos.map(
+        (grupo, indice) => ({
+
+            valor:
+                `Valor ${indice + 1}`,
+
+            imagens:
+                grupo.imagens,
+
+            produtos:
+                grupo.produtos.map(
+                    (item) => ({
+
+                        produto:
+                            item.produtoOriginal,
+
+                        valor:
+                            item.valor
+
+                    })
+                )
+
+        })
+    );
+
+}
+
+
+/* =========================================================
+   FUNÇÃO: VERIFICA SE DUAS TABELAS PODEM SER COMBINADAS
+========================================================= */
+
+function podeCombinar(
+    base,
+    candidata
+) {
+
+    /*
+       A candidata só pode preencher posições
+       que ainda estão null na base.
+
+       Se existir qualquer valor preenchido
+       nos dois lados para o mesmo produto,
+       a combinação inteira é rejeitada.
+    */
+
+    for (
+        const itemCandidato of candidata
+    ) {
+
+        if (
+            itemCandidato.valor === null ||
+            itemCandidato.valor === undefined
+        ) {
+            continue;
+        }
+
+
+        const itemBase =
+            base.find(
+                (item) =>
+                    normalizarProduto(
+                        item.produto
+                    ) ===
+                    normalizarProduto(
+                        itemCandidato.produto
+                    )
+            );
+
+
+        /*
+           Se o produto não existe na base,
+           não temos uma posição segura para preencher.
+
+           Neste caso, não combinamos as tabelas.
+        */
+
+        if (!itemBase) {
+            return false;
+        }
+
+
+        /*
+           O candidato só pode preencher uma posição
+           que esteja vazia na base.
+        */
+
+        if (
+            itemBase.valor !== null &&
+            itemBase.valor !== undefined
+        ) {
+            return false;
+        }
+
+    }
+
+
+    return true;
+
+}
+
+
+/* =========================================================
+   FUNÇÃO: PREENCHE OS NULLS DA TABELA BASE
+========================================================= */
+
+function preencherNulos(
+    base,
+    candidata
+) {
+
+    return base.map(
+        (itemBase) => {
+
+            const itemCandidato =
+                candidata.find(
+                    (item) =>
+                        normalizarProduto(
+                            item.produto
+                        ) ===
+                        normalizarProduto(
+                            itemBase.produto
+                        )
+                );
+
+
+            if (
+                itemBase.valor === null &&
+                itemCandidato &&
+                itemCandidato.valor !== null &&
+                itemCandidato.valor !== undefined
+            ) {
+
+                return {
+
+                    produto:
+                        itemBase.produto,
+
+                    produtoOriginal:
+                        itemBase.produtoOriginal,
+
+                    valor:
+                        itemCandidato.valor
+
+                };
+
+            }
+
+
+            return itemBase;
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   FUNÇÃO: NORMALIZA NOME DO PRODUTO
+========================================================= */
+
+function normalizarProduto(
+    produto
+) {
+
+    if (
+        produto === null ||
+        produto === undefined
+    ) {
+        return "";
+    }
+
+    return String(produto)
+        .normalize("NFD")
+        .replace(
+            /[\u0300-\u036f]/g,
+            ""
+        )
+        .trim()
+        .toLowerCase()
+        .replace(
+            /\s+/g,
+            " "
+        );
+
+}
+
+
+/* =========================================================
    FUNÇÃO: ENCONTRAR IMAGENS
 ========================================================= */
 
@@ -461,6 +852,7 @@ function encontrarImagens(pasta) {
             withFileTypes: true
         }
     );
+
 
     for (const item of itens) {
 
@@ -509,7 +901,9 @@ function encontrarImagens(pasta) {
 
     }
 
+
     return resultado;
+
 }
 
 
