@@ -228,11 +228,11 @@ Retorne somente JSON válido no formato solicitado.
     "Enviando imagens para o Gemini..."
 );
 
+let resposta;
+
 try {
 
-    try {
-
-    const resposta =
+    resposta =
         await ai.models.generateContent({
 
             model: "gemini-3.8-flash",
@@ -347,11 +347,6 @@ try {
     });
 
 }
-
-
-            console.log(
-                "Resposta recebida do Gemini."
-            );
 
 
             /* ---------------------------------------------
