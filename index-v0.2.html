@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digitalizar Tabela</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #111111;
+            color: #ffffff;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .container {
+            width: min(90%, 500px);
+            padding: 35px;
+            background: #1c1c1c;
+            border: 1px solid #333333;
+            border-radius: 14px;
+            text-align: center;
+        }
+
+        h1 {
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 28px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 12px 20px;
+            border: 1px solid #555555;
+            border-radius: 8px;
+            background: #292929;
+            color: #ffffff;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .button:hover {
+            background: #353535;
+        }
+
+        #fileName {
+            margin: 15px 0;
+            color: #bbbbbb;
+            word-break: break-word;
+        }
+
+        #processButton {
+            width: 100%;
+            margin-top: 10px;
+            padding: 13px 20px;
+            border: none;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #111111;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #processButton:hover {
+            background: #dddddd;
+        }
+
+        #processButton:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 18px;
+            color: #bbbbbb;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Digitalizar Tabela</h1>
+
+        <label for="fileInput" class="button">
+            Selecionar arquivo
+        </label>
+
+        <input
+            id="fileInput"
+            type="file"
+            accept=".zip,application/zip"
+        >
+
+        <div id="fileName">
+            Nenhum arquivo selecionado
+        </div>
+
+        <button id="processButton">
+            Processar arquivo
+        </button>
+
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = "https://digitalizar-tabela.onrender.com";
+
+        const fileInput = document.getElementById("fileInput");
+        const fileName = document.getElementById("fileName");
+        const processButton = document.getElementById("processButton");
+        const status = document.getElementById("status");
+
+        fileInput.addEventListener("change", function () {
+            if (fileInput.files.length > 0) {
+                fileName.textContent = fileInput.files[0].name;
+                status.textContent = "";
+            } else {
+                fileName.textContent = "Nenhum arquivo selecionado";
+            }
+        });
+
+        processButton.addEventListener("click", async function () {
+            if (fileInput.files.length === 0) {
+                alert("Selecione um arquivo ZIP primeiro.");
+                return;
+            }
+
+            const arquivo = fileInput.files[0];
+
+            if (!arquivo.name.toLowerCase().endsWith(".zip")) {
+                alert("Selecione um arquivo ZIP.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("arquivo", arquivo);
+
+            processButton.disabled = true;
+            processButton.textContent = "Processando...";
+            status.textContent = "Enviando arquivo para o servidor...";
+
+            try {
+                const resposta = await fetch(
+                    `${BACKEND_URL}/processar`,
+                    {
+                        method: "POST",
+                        body: formData
+                    }
+                );
+
+                const resultado = await resposta.json();
+
+                if (!resposta.ok) {
+                    throw new Error(
+                        resultado.erro ||
+                        "Erro ao processar o arquivo."
+                    );
+                }
+
+                console.log(
+                    "Resultado do backend:",
+                    resultado
+                );
+
+                status.textContent =
+                    "Arquivo processado com sucesso!
+
+" +
+                    "Imagens encontradas: " +
+                    resultado.quantidadeImagens +
+                    "
+
+" +
+                    "Os dados extraídos estão disponíveis no console do navegador.";
+
+            } catch (erro) {
+                console.error("Erro:", erro);
+
+                status.textContent =
+                    "Não foi possível processar o arquivo.
+
+" +
+                    erro.message;
+            } finally {
+                processButton.disabled = false;
+                processButton.textContent = "Processar arquivo";
+            }
+        });
+    </script>
+
+</body>
+</html>
