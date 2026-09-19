@@ -425,23 +425,78 @@ Retorne somente JSON válido no formato solicitado.
 
         } catch (erro) {
 
-            console.error(
-                "Erro durante o processamento:"
-            );
+    console.error(
+        "========================================"
+    );
 
-            console.error(erro);
+    console.error(
+        "ERRO COMPLETO DURANTE O PROCESSAMENTO"
+    );
 
-            return res.status(500).json({
+    console.error(
+        "========================================"
+    );
 
-                erro:
-                    "Erro ao processar o arquivo.",
+    console.error(
+        "Mensagem:",
+        erro?.message
+    );
 
-                detalhes:
-                    erro.message
+    console.error(
+        "Nome:",
+        erro?.name
+    );
 
-            });
+    console.error(
+        "Status:",
+        erro?.status
+    );
 
-        } finally {
+    console.error(
+        "Código:",
+        erro?.code
+    );
+
+    console.error(
+        "Detalhes:",
+        erro?.details
+    );
+
+    console.error(
+        "Stack:",
+        erro?.stack
+    );
+
+    console.error(
+        "Objeto completo:",
+        JSON.stringify(
+            erro,
+            Object.getOwnPropertyNames(erro),
+            2
+        )
+    );
+
+    return res.status(500).json({
+
+        erro:
+            "Erro ao processar o arquivo.",
+
+        detalhes:
+            erro?.message ||
+            String(erro),
+
+        nome:
+            erro?.name,
+
+        status:
+            erro?.status,
+
+        codigo:
+            erro?.code
+
+    });
+
+} finally {
 
 
             /* ---------------------------------------------
