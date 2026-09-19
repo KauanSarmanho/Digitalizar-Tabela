@@ -5,6 +5,7 @@ const AdmZip = require("adm-zip");
 const fs = require("fs");
 const path = require("path");
 const { GoogleGenAI } = require("@google/genai");
+const ExcelJS = require("exceljs");
 
 const app = express();
 
@@ -381,6 +382,31 @@ Retorne somente JSON válido no formato solicitado.
 
 
             /* ---------------------------------------------
+               Gera Excel
+            --------------------------------------------- */
+
+            console.log(
+                "Gerando arquivo Excel..."
+            );
+
+            const arquivoExcel =
+                await gerarExcel(
+                    resultado.combinacoes
+                );
+
+            const nomeArquivo =
+                `tabela-digitalizada-${Date.now()}.xlsx`;
+
+            resultado.arquivoExcel = {
+                nome: nomeArquivo,
+                base64:
+                    arquivoExcel.toString(
+                        "base64"
+                    )
+            };
+
+
+            /* ---------------------------------------------
                Retorna resultado
             --------------------------------------------- */
 
@@ -471,6 +497,272 @@ Retorne somente JSON válido no formato solicitado.
 
 
 /* =========================================================
+   FUNÇÃO: GERAR EXCEL
+========================================================= */
+
+async function gerarExcel(combinacoes) {
+
+    const workbook =
+        new ExcelJS.Workbook();
+
+    const worksheet =
+        workbook.addWorksheet(
+            "Planilha1"
+        );
+
+
+    /*
+       Produtos aparecem na ordem em que são encontrados
+       nas combinações.
+    */
+
+    const produtos = [];
+
+    for (
+        const combinacao of combinacoes
+    ) {
+
+        for (
+            const item of combinacao.produtos
+        ) {
+
+            const chave =
+                normalizarProduto(
+                    item.produto
+                );
+
+            const jaExiste =
+                produtos.some(
+                    (produto) =>
+                        normalizarProduto(
+                            produto
+                        ) === chave
+                );
+
+            if (!jaExiste) {
+
+                produtos.push(
+                    item.produto
+                );
+
+            }
+
+        }
+
+    }
+
+
+    /*
+       Cria o cabeçalho:
+       Produto | Valor 1 | Valor 2 | Valor 3...
+    */
+
+    const cabecalho = [
+        "Produto",
+        ...combinacoes.map(
+            (combinacao) =>
+                combinacao.valor
+        )
+    ];
+
+    worksheet.addRow(
+        cabecalho
+    );
+
+
+    /*
+       Cria um mapa para localizar rapidamente
+       o valor de cada produto em cada combinação.
+    */
+
+    const mapasPorCombinacao =
+        combinacoes.map(
+            (combinacao) => {
+
+                const mapa =
+                    new Map();
+
+                for (
+                    const item of combinacao.produtos
+                ) {
+
+                    mapa.set(
+                        normalizarProduto(
+                            item.produto
+                        ),
+                        item.valor
+                    );
+
+                }
+
+                return mapa;
+
+            }
+        );
+
+
+    /*
+       Preenche as linhas dos produtos.
+    */
+
+    for (
+        const produto of produtos
+    ) {
+
+        const chave =
+            normalizarProduto(
+                produto
+            );
+
+        const linha = [
+            produto
+        ];
+
+        for (
+            const mapa of mapasPorCombinacao
+        ) {
+
+            const valor =
+                mapa.get(chave);
+
+            linha.push(
+                valor === null ||
+                valor === undefined
+                    ? ""
+                    : valor
+            );
+
+        }
+
+        worksheet.addRow(
+            linha
+        );
+
+    }
+
+
+    /*
+       Ajusta largura das colunas.
+    */
+
+    worksheet.columns.forEach(
+        (coluna, indice) => {
+
+            let largura = 12;
+
+            for (
+                const celula of coluna.values
+            ) {
+
+                if (
+                    celula !== null &&
+                    celula !== undefined
+                ) {
+
+                    largura =
+                        Math.max(
+                            largura,
+                            String(
+                                celula
+                            ).length + 2
+                        );
+
+                }
+
+            }
+
+            coluna.width =
+                indice === 0
+                    ? Math.max(
+                        largura,
+                        20
+                    )
+                    : Math.min(
+                        Math.max(
+                            largura,
+                            12
+                        ),
+                        20
+                    );
+
+        }
+    );
+
+
+    /*
+       Congela a primeira linha.
+    */
+
+    worksheet.views = [
+        {
+            state: "frozen",
+            ySplit: 1
+        }
+    ];
+
+
+    /*
+       Formatação básica do cabeçalho.
+    */
+
+    const primeiraLinha =
+        worksheet.getRow(1);
+
+    primeiraLinha.font = {
+        bold: true
+    };
+
+    primeiraLinha.alignment = {
+        vertical: "middle",
+        horizontal: "center"
+    };
+
+
+    /*
+       Valores numéricos ficam como números
+       no Excel.
+    */
+
+    for (
+        let linha = 2;
+        linha <= worksheet.rowCount;
+        linha++
+    ) {
+
+        for (
+            let coluna = 2;
+            coluna <= worksheet.columnCount;
+            coluna++
+        ) {
+
+            const celula =
+                worksheet.getCell(
+                    linha,
+                    coluna
+                );
+
+            if (
+                typeof celula.value === "number"
+            ) {
+
+                celula.numFmt =
+                    "0.##";
+
+            }
+
+        }
+
+    }
+
+
+    return Buffer.from(
+        await workbook.xlsx.writeBuffer()
+    );
+
+}
+
+
+/* =========================================================
    FUNÇÃO: COMBINAR TABELAS
 ========================================================= */
 
@@ -484,74 +776,65 @@ function combinarTabelas(tabelas) {
     }
 
 
-    /*
-       Normaliza os dados das tabelas.
+    const tabelasValidas =
+        tabelas
+            .map(
+                (tabela, indice) => {
 
-       Uma tabela sem nenhum valor preenchido
-       é ignorada.
-    */
+                    const produtos =
+                        Array.isArray(
+                            tabela.produtos
+                        )
+                            ? tabela.produtos
+                            : [];
 
-    const tabelasValidas = tabelas
-        .map((tabela, indice) => {
+                    const produtosNormalizados =
+                        produtos.map(
+                            (item) => ({
 
-            const produtos = Array.isArray(
-                tabela.produtos
+                                produto:
+                                    normalizarProduto(
+                                        item.produto
+                                    ),
+
+                                produtoOriginal:
+                                    item.produto,
+
+                                valor:
+                                    item.valor
+
+                            })
+                        );
+
+                    const possuiValor =
+                        produtosNormalizados.some(
+                            (item) =>
+                                item.valor !== null &&
+                                item.valor !== undefined
+                        );
+
+                    return {
+
+                        indiceOriginal:
+                            indice,
+
+                        imagem:
+                            tabela.imagem,
+
+                        produtos:
+                            produtosNormalizados,
+
+                        possuiValor
+
+                    };
+
+                }
             )
-                ? tabela.produtos
-                : [];
+            .filter(
+                (tabela) =>
+                    tabela.possuiValor
+            );
 
-            const produtosNormalizados =
-                produtos.map((item) => ({
-
-                    produto:
-                        normalizarProduto(
-                            item.produto
-                        ),
-
-                    produtoOriginal:
-                        item.produto,
-
-                    valor:
-                        item.valor
-
-                }));
-
-            const possuiValor =
-                produtosNormalizados.some(
-                    (item) =>
-                        item.valor !== null &&
-                        item.valor !== undefined
-                );
-
-            return {
-
-                indiceOriginal:
-                    indice,
-
-                imagem:
-                    tabela.imagem,
-
-                produtos:
-                    produtosNormalizados,
-
-                possuiValor
-
-            };
-
-        })
-        .filter(
-            (tabela) =>
-                tabela.possuiValor
-        );
-
-
-    /*
-       Cada grupo começa com uma tabela.
-
-       Depois tentamos adicionar as tabelas seguintes
-       quando nenhum valor preenchido entra em conflito
-       com um valor que já existe no grupo.
-    */
 
     const grupos = [];
 
@@ -560,15 +843,9 @@ function combinarTabelas(tabelas) {
         const tabela of tabelasValidas
     ) {
 
-        let grupoEncontrado = false;
+        let grupoEncontrado =
+            false;
 
-
-        /*
-           Procuramos primeiro um grupo já existente
-           que possa receber esta tabela.
-
-           A ordem original das imagens é preservada.
-        */
 
         for (
             const grupo of grupos
@@ -595,7 +872,8 @@ function combinarTabelas(tabelas) {
                     tabela.indiceOriginal
                 );
 
-                grupoEncontrado = true;
+                grupoEncontrado =
+                    true;
 
                 break;
             }
@@ -603,12 +881,9 @@ function combinarTabelas(tabelas) {
         }
 
 
-        /*
-           Se não encontrou nenhum grupo compatível,
-           cria um novo grupo.
-        */
-
-        if (!grupoEncontrado) {
+        if (
+            !grupoEncontrado
+        ) {
 
             grupos.push({
 
@@ -642,13 +917,6 @@ function combinarTabelas(tabelas) {
 
     }
 
-
-    /*
-       Monta o resultado final.
-
-       Cada grupo representa uma coluna:
-       Valor 1, Valor 2, Valor 3...
-    */
 
     return grupos.map(
         (grupo, indice) => ({
@@ -687,15 +955,6 @@ function podeCombinar(
     candidata
 ) {
 
-    /*
-       A candidata só pode preencher posições
-       que ainda estão null na base.
-
-       Se existir qualquer valor preenchido
-       nos dois lados para o mesmo produto,
-       a combinação inteira é rejeitada.
-    */
-
     for (
         const itemCandidato of candidata
     ) {
@@ -704,7 +963,9 @@ function podeCombinar(
             itemCandidato.valor === null ||
             itemCandidato.valor === undefined
         ) {
+
             continue;
+
         }
 
 
@@ -720,28 +981,22 @@ function podeCombinar(
             );
 
 
-        /*
-           Se o produto não existe na base,
-           não temos uma posição segura para preencher.
+        if (
+            !itemBase
+        ) {
 
-           Neste caso, não combinamos as tabelas.
-        */
-
-        if (!itemBase) {
             return false;
+
         }
 
-
-        /*
-           O candidato só pode preencher uma posição
-           que esteja vazia na base.
-        */
 
         if (
             itemBase.valor !== null &&
             itemBase.valor !== undefined
         ) {
+
             return false;
+
         }
 
     }
@@ -819,10 +1074,14 @@ function normalizarProduto(
         produto === null ||
         produto === undefined
     ) {
+
         return "";
+
     }
 
-    return String(produto)
+    return String(
+        produto
+    )
         .normalize("NFD")
         .replace(
             /[\u0300-\u036f]/g,
@@ -842,19 +1101,24 @@ function normalizarProduto(
    FUNÇÃO: ENCONTRAR IMAGENS
 ========================================================= */
 
-function encontrarImagens(pasta) {
+function encontrarImagens(
+    pasta
+) {
 
     const resultado = [];
 
-    const itens = fs.readdirSync(
-        pasta,
-        {
-            withFileTypes: true
-        }
-    );
+    const itens =
+        fs.readdirSync(
+            pasta,
+            {
+                withFileTypes: true
+            }
+        );
 
 
-    for (const item of itens) {
+    for (
+        const item of itens
+    ) {
 
         const caminhoCompleto =
             path.join(
@@ -863,7 +1127,9 @@ function encontrarImagens(pasta) {
             );
 
 
-        if (item.isDirectory()) {
+        if (
+            item.isDirectory()
+        ) {
 
             resultado.push(
                 ...encontrarImagens(
@@ -911,7 +1177,9 @@ function encontrarImagens(pasta) {
    FUNÇÃO: MIME TYPE
 ========================================================= */
 
-function obterMimeType(caminho) {
+function obterMimeType(
+    caminho
+) {
 
     const extensao =
         path.extname(
@@ -919,7 +1187,9 @@ function obterMimeType(caminho) {
         ).toLowerCase();
 
 
-    switch (extensao) {
+    switch (
+        extensao
+    ) {
 
         case ".jpg":
         case ".jpeg":
@@ -950,13 +1220,17 @@ function obterMimeType(caminho) {
    FUNÇÃO: REMOVER ARQUIVO
 ========================================================= */
 
-function removerArquivo(caminho) {
+function removerArquivo(
+    caminho
+) {
 
     try {
 
         if (
             caminho &&
-            fs.existsSync(caminho)
+            fs.existsSync(
+                caminho
+            )
         ) {
 
             fs.unlinkSync(
